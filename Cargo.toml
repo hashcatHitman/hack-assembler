@@ -1,0 +1,32 @@
+[package]
+name = "hack-assembler"
+version = "0.1.0"
+edition = "2024"
+description = "An assembler that translates programs written in the Hack assembly language into Hack binary code."
+repository = "https://github.com/hashcatHitman/hack-assembler"
+license = "AGPL-3.0-or-later"
+keywords = ["nand2tetris", "assembler"]
+categories = ["command-line-utilities", "compilers", "parser-implementations"]
+publish = false
+
+[lints.rust]
+unsafe_code = { level = "forbid", priority = 2 }
+deprecated_safe_2024 = { level = "forbid", priority = 2 }
+
+[lints.clippy]
+correctness = { level = "forbid", priority = 2 }
+suspicious = { level = "warn", priority = 0 }
+complexity = { level = "warn", priority = 0 }
+perf = { level = "warn", priority = 0 }
+style = { level = "warn", priority = 0 }
+pedantic = { level = "warn", priority = 0 }
+cargo = { level = "warn", priority = 0 }
+missing_docs_in_private_items = { level = "warn", priority = 0 }
+must_use_candidate = { level = "allow", priority = 1 }
+
+[dependencies]
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+strip = "symbols"
