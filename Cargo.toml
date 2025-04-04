@@ -2,7 +2,10 @@
 name = "hack-assembler"
 version = "0.1.0"
 edition = "2024"
-description = "An assembler that translates programs written in the Hack assembly language into Hack binary code."
+description = """\
+              An assembler that translates programs written in the Hack \
+              assembly language into Hack binary code.\
+              """
 repository = "https://github.com/hashcatHitman/hack-assembler"
 license = "AGPL-3.0-or-later"
 keywords = ["nand2tetris", "assembler"]
@@ -25,6 +28,8 @@ missing_docs_in_private_items = { level = "warn", priority = 0 }
 must_use_candidate = { level = "allow", priority = 1 }
 
 [dependencies]
+strum = "0.27"
+strum_macros = "0.27"
 
 [profile.release]
 codegen-units = 1
