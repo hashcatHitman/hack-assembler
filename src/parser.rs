@@ -318,7 +318,7 @@ impl Instruction {
     pub const MAX_VALID_MEMORY_ADDRESS: u16 = 0x6000;
 
     /// Attempts to parse a [`Instruction::Label`] from a string.
-    fn try_parse_label(label: &str) -> Result<Instruction, ParserError> {
+    fn try_parse_label(label: &str) -> Result<Self, ParserError> {
         if !(label.starts_with('(') && label.ends_with(')')) {
             return Err(ParserError::LabelHasBadParentheses);
         }
@@ -335,13 +335,13 @@ impl Instruction {
     }
 
     /// Attempts to parse an [`Instruction::Address`] from a string.
-    fn try_parse_address(address: &str) -> Result<Instruction, ParserError> {
+    fn try_parse_address(address: &str) -> Result<Self, ParserError> {
         let address: &str = &address[1..];
         match address {
             address if Self::is_allowed_constant(address) => {
                 Ok(Self::Address(address.into()))
             }
-            symbol if Instruction::is_allowed_symbol(symbol) => {
+            symbol if Self::is_allowed_symbol(symbol) => {
                 Ok(Self::Address(symbol.into()))
             }
             _ => Err(ParserError::InvalidAddress),
@@ -349,7 +349,7 @@ impl Instruction {
     }
 
     /// Attempts to parse a [`Instruction::Compute`] from a string.
-    fn try_parse_compute(compute: &str) -> Result<Instruction, ParserError> {
+    fn try_parse_compute(compute: &str) -> Result<Self, ParserError> {
         let split: [&str; 3] = Self::decompose_compute_instruction(compute);
         let mut compare: String = String::new();
         if !split[0].is_empty() {
