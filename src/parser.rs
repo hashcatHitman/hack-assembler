@@ -1,14 +1,38 @@
 //! # Hack Parser
 //!
+//! <details>
+//!     <summary>Licensing Info</summary>
+//!
+//! > hack-assembler - An assembler that translates programs written in the Hack
+//! > assembly language into Hack binary code.
+//! > Copyright (C) 2025  [hashcatHitman] and [jlg-repo]
+//! >
+//! > This program is free software: you can redistribute it and/or modify
+//! > it under the terms of the GNU Affero General Public License as published
+//! > by the Free Software Foundation, either version 3 of the License, or
+//! > (at your option) any later version.
+//! >
+//! > This program is distributed in the hope that it will be useful,
+//! > but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! > MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! > GNU Affero General Public License for more details.
+//! >
+//! > You should have received a copy of the GNU Affero General Public License
+//! > along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//!
+//! [hashcatHitman]: https://github.com/hashcatHitman
+//! [jlg-repo]: https://github.com/jlg-repo
+//!
+//! </details>
+//!
 //! The parser module is responsible for reading `*.asm` files and parsing them
 //! into symbols for assembly.
 //!
 //! For example, all of the following will be read correctly except "fail",
 //! which is not a valid Hack assembly instruction:
 //! ```
+//! use hack_assembler::parser::{Code, Instruction, ParserError};
 //! use std::str::FromStr;
-//! use hack_assembler::parser::Instruction;
-//! use hack_assembler::parser::ParserError;
 //!
 //! let instructions: [&str; 5] =
 //!     [" (wow)\n", "@var", "@100", "\tADM=M-1;JNE", "fail"];
@@ -17,22 +41,37 @@
 //!     let instruction: Result<Instruction, ParserError> =
 //!         Instruction::from_str(instruction);
 //!     match instruction {
-//!         Ok(Instruction::Address(instruction)) => {
+//!         Ok(
+//!             instruction @ (Instruction::AddressLiteral(_)
+//!             | Instruction::AddressSymbolic(_)),
+//!         ) => {
 //!             println!(
-//!                 "Found address: {}",
-//!                 Instruction::Address(instruction)
+//!                 "Found address: {} with code {}",
+//!                 instruction,
+//!                 instruction.code()
 //!             );
 //!         }
-//!         Ok(Instruction::Label(instruction)) => {
-//!             println!("Found label: {}", Instruction::Label(instruction));
+//!         Ok(instruction @ Instruction::Label(_)) => {
+//!             println!(
+//!                 "Found label: {} with code {}",
+//!                 instruction,
+//!                 instruction.code()
+//!             );
 //!         }
-//!         Ok(Instruction::Compute(d, c, j)) => {
-//!             println!("Found compute: {}", Instruction::Compute(d, c, j));
+//!         Ok(instruction @ Instruction::Compute(..)) => {
+//!             println!(
+//!                 "Found compute: {} with code {}",
+//!                 instruction,
+//!                 instruction.code()
+//!             );
 //!         }
 //!         Err(error) => eprintln!("{error}"),
 //!     }
 //! }
 //! ```
+
+mod codegen;
+mod error;
 
 use std::convert::TryFrom;
 use std::fmt::Display;
@@ -40,11 +79,10 @@ use std::fs::read_to_string;
 use std::iter::Iterator;
 use std::str::FromStr;
 use strum::VariantNames;
-use strum_macros::{EnumString, VariantNames};
+use strum_macros::{EnumIter, EnumProperty, EnumString, VariantNames};
 
+pub use codegen::Code;
 pub use error::ParserError;
-
-mod error;
 
 /// The [`Destination`] portion of a [`Instruction::Compute`].
 ///
@@ -53,28 +91,39 @@ mod error;
 /// representation, the first bit is whether or not to store in the `A`
 /// register, the second bit is whether or not to store in the `D` register,
 /// the third bit is whether or not to store in `RAM[A]`.
-#[derive(VariantNames, EnumString, strum_macros::Display)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Hash,
+    strum_macros::Display,
+    EnumIter,
+    EnumProperty,
+    EnumString,
+    VariantNames,
+)]
 pub enum Destination {
     /// Store in: `RAM[A]`.
-    #[strum(to_string = "M")]
+    #[strum(props(code = "001"), to_string = "M")]
     M,
     /// Store in: `D` register.
-    #[strum(to_string = "D")]
+    #[strum(props(code = "010"), to_string = "D")]
     D,
     /// Store in: `D` register and `RAM[A]`.
-    #[strum(to_string = "DM", serialize = "MD")]
+    #[strum(props(code = "011"), to_string = "DM", serialize = "MD")]
     DM,
     /// Store in: `A` register.
-    #[strum(to_string = "A")]
+    #[strum(props(code = "100"), to_string = "A")]
     A,
     /// Store in: `A` register and `RAM[A]`.
-    #[strum(to_string = "AM", serialize = "MA")]
+    #[strum(props(code = "101"), to_string = "AM", serialize = "MA")]
     AM,
     /// Store in: `A` register and `D` register.
-    #[strum(to_string = "AD", serialize = "DA")]
+    #[strum(props(code = "110"), to_string = "AD", serialize = "DA")]
     AD,
     /// Store in: `A` register, `D` register, and `RAM[A]`.
     #[strum(
+        props(code = "111"),
         to_string = "ADM",
         serialize = "AMD",
         serialize = "MAD",
@@ -84,7 +133,7 @@ pub enum Destination {
     )]
     ADM,
     /// The value is not stored.
-    #[strum(to_string = "")]
+    #[strum(props(code = "000"), to_string = "")]
     None,
 }
 
@@ -107,98 +156,108 @@ pub enum Destination {
 /// - `c4` = `ny` = logical negation of `y`
 /// - `c5` = `f` = if `1`, do `x + y`, else do `x & y`
 /// - `c6` = `no` = if `1`, logical negation of result from `c5`/`f`
-#[derive(VariantNames, EnumString, strum_macros::Display)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Hash,
+    strum_macros::Display,
+    EnumIter,
+    EnumProperty,
+    EnumString,
+    VariantNames,
+)]
 pub enum Compute {
     /// Compute: `0`.
-    #[strum(to_string = "0")]
+    #[strum(props(code = "0101010"), to_string = "0")]
     Zero,
     /// Compute: `1`.
-    #[strum(to_string = "1")]
+    #[strum(props(code = "0111111"), to_string = "1")]
     One,
     /// Compute: `-1`.
-    #[strum(to_string = "-1")]
+    #[strum(props(code = "0111010"), to_string = "-1")]
     NegativeOne,
     /// Compute: the value in the `D` register.
-    #[strum(to_string = "D")]
+    #[strum(props(code = "0001100"), to_string = "D")]
     D,
     /// Compute: the value in the `A` register.
-    #[strum(to_string = "A")]
+    #[strum(props(code = "0110000"), to_string = "A")]
     A,
     /// Compute: the value in `RAM[A]`.
-    #[strum(to_string = "M")]
+    #[strum(props(code = "1110000"), to_string = "M")]
     M,
     /// Compute: bitwise negation of the value in the `D` register.
-    #[strum(to_string = "!D")]
+    #[strum(props(code = "0001101"), to_string = "!D")]
     NotD,
     /// Compute: bitwise negation of the value in the `A` register.
-    #[strum(to_string = "!A")]
+    #[strum(props(code = "0110001"), to_string = "!A")]
     NotA,
     /// Compute: bitwise negation of the value in `RAM[A]`.
-    #[strum(to_string = "!M")]
+    #[strum(props(code = "1110001"), to_string = "!M")]
     NotM,
     /// Compute: arithmetic negation of the value in the `D` register.
-    #[strum(to_string = "-D")]
+    #[strum(props(code = "0001111"), to_string = "-D")]
     NegativeD,
     /// Compute: arithmetic negation of the value in the `A` register.
-    #[strum(to_string = "-A")]
+    #[strum(props(code = "0110011"), to_string = "-A")]
     NegativeA,
     /// Compute: arithmetic negation of the value in `RAM[A]`.
-    #[strum(to_string = "-M")]
+    #[strum(props(code = "1110011"), to_string = "-M")]
     NegativeM,
     /// Compute: the value in the `D` register plus `1`.
-    #[strum(to_string = "D+1", serialize = "1+D")]
+    #[strum(props(code = "0011111"), to_string = "D+1", serialize = "1+D")]
     DPlusOne,
     /// Compute: the value in the `A` register plus `1`.
-    #[strum(to_string = "A+1", serialize = "1+A")]
+    #[strum(props(code = "0110111"), to_string = "A+1", serialize = "1+A")]
     APlusOne,
     /// Compute: the value in `RAM[A]` plus `1`.
-    #[strum(to_string = "M+1", serialize = "1+M")]
-    MPlusone,
+    #[strum(props(code = "1110111"), to_string = "M+1", serialize = "1+M")]
+    MPlusOne,
     /// Compute: the value in the `D` register minus `1`.
-    #[strum(to_string = "D-1")]
+    #[strum(props(code = "0001110"), to_string = "D-1")]
     DMinusOne,
     /// Compute: the value in the `A` register minus `1`.
-    #[strum(to_string = "A-1")]
+    #[strum(props(code = "0110010"), to_string = "A-1")]
     AMinusOne,
     /// Compute: the value in `RAM[A]` minus `1`.
-    #[strum(to_string = "M-1")]
+    #[strum(props(code = "1110010"), to_string = "M-1")]
     MMinusOne,
     /// Compute: the value in the `D` register plus the value in the `A`
     /// register.
-    #[strum(to_string = "D+A", serialize = "A+D")]
+    #[strum(props(code = "0000010"), to_string = "D+A", serialize = "A+D")]
     DPlusA,
     /// Compute: the value in the `D` register plus the value in `RAM[A]`.
-    #[strum(to_string = "D+M", serialize = "M+D")]
+    #[strum(props(code = "1000010"), to_string = "D+M", serialize = "M+D")]
     DPlusM,
     /// Compute: the value in the `D` register minus the value in the `A`
     /// register.
-    #[strum(to_string = "D-A")]
+    #[strum(props(code = "0010011"), to_string = "D-A")]
     DMinusA,
     /// Compute: the value in the `D` register minus the value in `RAM[A]`.
-    #[strum(to_string = "D-M")]
+    #[strum(props(code = "1010011"), to_string = "D-M")]
     DMinusM,
     /// Compute: the value in the `A` register minus the value in the `D`
     /// register.
-    #[strum(to_string = "A-D")]
+    #[strum(props(code = "0000111"), to_string = "A-D")]
     AMinusD,
     /// Compute: the value in `RAM[A]` minus the value in the `D` register.
-    #[strum(to_string = "M-D")]
+    #[strum(props(code = "1000111"), to_string = "M-D")]
     MMinusD,
     /// Compute: the bitwise AND of the value in the `D` register and the value
     /// in the `A` register.
-    #[strum(to_string = "D&A", serialize = "A&D")]
+    #[strum(props(code = "0000000"), to_string = "D&A", serialize = "A&D")]
     DAndA,
     /// Compute: the bitwise AND of the value in the `D` register and the value
     /// in `RAM[A]`.
-    #[strum(to_string = "D&M", serialize = "M&D")]
+    #[strum(props(code = "1000000"), to_string = "D&M", serialize = "M&D")]
     DAndM,
     /// Compute: the bitwise OR of the value in the `D` register and the value
     /// in the `A` register.
-    #[strum(to_string = "D|A", serialize = "A|D")]
+    #[strum(props(code = "0010101"), to_string = "D|A", serialize = "A|D")]
     DOrA,
     /// Compute: the bitwise OR of the value in the `D` register and the value
     /// in `RAM[A]`.
-    #[strum(to_string = "D|M", serialize = "M|D")]
+    #[strum(props(code = "1010101"), to_string = "D|M", serialize = "M|D")]
     DOrM,
 }
 
@@ -211,25 +270,42 @@ pub enum Compute {
 /// less than `0`, the second bit is whether or not to jump if [`Compute`] is
 /// equal to `0`, and the third bit is whether or not to jump if [`Compute`] is
 /// greater than `0`.
-#[derive(VariantNames, EnumString, strum_macros::Display)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Hash,
+    strum_macros::Display,
+    EnumIter,
+    EnumProperty,
+    EnumString,
+    VariantNames,
+)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum Jump {
     /// Jump if: [`Compute`] > `0`.
+    #[strum(props(code = "001"))]
     JGT,
     /// Jump if: [`Compute`] == `0`.
+    #[strum(props(code = "010"))]
     JEQ,
     /// Jump if: [`Compute`] >= `0`.
+    #[strum(props(code = "011"))]
     JGE,
     /// Jump if: [`Compute`] < `0`.
+    #[strum(props(code = "100"))]
     JLT,
     /// Jump if: [`Compute`] != `0`.
+    #[strum(props(code = "101"))]
     JNE,
     /// Jump if: [`Compute`] <= `0`.
+    #[strum(props(code = "110"))]
     JLE,
     /// Jump.
+    #[strum(props(code = "111"))]
     JMP,
     /// Don't jump.
-    #[strum(to_string = "")]
+    #[strum(props(code = "000"), to_string = "")]
     None,
 }
 
@@ -252,7 +328,7 @@ pub enum Jump {
 ///     Err(_) => println!("Failure!"),
 /// }
 /// ```
-#[derive(Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct Parser {
     /// The contents of the file as a String.
     file: String,
@@ -277,23 +353,34 @@ impl TryFrom<&str> for Parser {
     }
 }
 
-/// The two types of [`Instruction`] (and the one pseudo-instruction) supported by
-/// the Hack CPU.
+/// The two types of [`Instruction`] (and the one pseudo-instruction) supported
+/// by the Hack CPU.
+#[derive(Debug, Clone, Hash)]
 pub enum Instruction {
-    /// [`Instruction::Address`] represents an A-instruction. The [`String`]
-    /// inside should be the symbol or numerical constant that would come after
-    /// the `@`.
+    /// [`Instruction::AddressSymbolic`] represents an A-instruction. The
+    /// [`String`] inside should be the symbol that would come after the `@`.
+    ///
+    /// Example:
+    /// ```
+    /// use hack_assembler::parser::Instruction;
+    ///
+    /// // @my_var
+    /// Instruction::AddressSymbolic("my_var".into());
+    /// ```
+    AddressSymbolic(String),
+    /// [`Instruction::AddressLiteral`] represents an A-instruction. The
+    /// [`u16`] inside should be the numerical constant that would come after
+    /// the `@`. It must be less than or equal to
+    /// [`Instruction::MAX_VALID_CONSTANT`].
     ///
     /// Examples:
     /// ```
     /// use hack_assembler::parser::Instruction;
     ///
     /// // @1984
-    /// Instruction::Address("1984".into());
-    /// // @my_var
-    /// Instruction::Address("my_var".into());
+    /// Instruction::AddressLiteral(1984);
     /// ```
-    Address(String),
+    AddressLiteral(u16),
     /// [`Instruction::Compute`] represents a C-instruction. It is already
     /// broken into the three parts, which have their own types.
     ///
@@ -314,8 +401,8 @@ pub enum Instruction {
 }
 
 impl Instruction {
-    /// The highest valid memory address in the Hack computer.
-    pub const MAX_VALID_MEMORY_ADDRESS: u16 = 0x6000;
+    /// The highest valid constant in the Hack computer.
+    pub const MAX_VALID_CONSTANT: u16 = 0x7FFF;
 
     /// Attempts to parse a [`Instruction::Label`] from a string.
     fn try_parse_label(label: &str) -> Result<Self, ParserError> {
@@ -334,15 +421,19 @@ impl Instruction {
         }
     }
 
-    /// Attempts to parse an [`Instruction::Address`] from a string.
+    /// Attempts to parse an [`Instruction::AddressLiteral`] or an
+    /// [`Instruction::AddressSymbolic`] from a string.
     fn try_parse_address(address: &str) -> Result<Self, ParserError> {
         let address: &str = &address[1..];
-        match address {
-            address if Self::is_allowed_constant(address) => {
-                Ok(Self::Address(address.into()))
+        let parsed: Result<u16, _> = address.parse();
+        match (address, parsed) {
+            (address, Ok(parsed))
+                if Self::is_allowed_constant(address, parsed) =>
+            {
+                Ok(Self::AddressLiteral(parsed))
             }
-            symbol if Self::is_allowed_symbol(symbol) => {
-                Ok(Self::Address(symbol.into()))
+            (symbol, _) if Self::is_allowed_symbol(symbol) => {
+                Ok(Self::AddressSymbolic(symbol.into()))
             }
             _ => Err(ParserError::InvalidAddress),
         }
@@ -426,11 +517,11 @@ impl Instruction {
     /// Determine if a given string is a valid constant.
     ///
     /// Constants must be non-negative and are always written in decimal
-    /// notation. They should not exceed [`Self::MAX_VALID_MEMORY_ADDRESS`].
-    fn is_allowed_constant(string: &str) -> bool {
+    /// notation. They should not exceed [`Self::MAX_VALID_CONSTANT`].
+    fn is_allowed_constant(string: &str, value: u16) -> bool {
         !string.is_empty()
             && !string.contains(|character: char| !(character.is_ascii_digit()))
-            && string <= format!("{}", Self::MAX_VALID_MEMORY_ADDRESS).as_str()
+            && value <= Self::MAX_VALID_CONSTANT
     }
 }
 
@@ -455,7 +546,12 @@ impl Display for Instruction {
     /// Attempts to create a string representation of this [`Instruction`].
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Address(address) => write!(f, "{address}"),
+            Self::AddressLiteral(address) => {
+                write!(f, "{address}")
+            }
+            Self::AddressSymbolic(address) => {
+                write!(f, "{address}")
+            }
             Self::Compute(dest, comp, jump) => {
                 let mut compute: String = String::new();
 
@@ -500,11 +596,9 @@ mod tests {
 
     #[test]
     fn memory_address_safety() {
-        let less: String =
-            format!("{}", Instruction::MAX_VALID_MEMORY_ADDRESS - 1);
-        let max: String = format!("{}", Instruction::MAX_VALID_MEMORY_ADDRESS);
-        let more: String =
-            format!("{}", Instruction::MAX_VALID_MEMORY_ADDRESS + 1);
+        let less: String = format!("{}", Instruction::MAX_VALID_CONSTANT - 1);
+        let max: String = format!("{}", Instruction::MAX_VALID_CONSTANT);
+        let more: String = format!("{}", Instruction::MAX_VALID_CONSTANT + 1);
         assert!(less < max);
         assert!(less < more);
         assert!(max > less);
@@ -512,19 +606,26 @@ mod tests {
         assert!(more > less);
         assert!(more > max);
 
-        assert!(Instruction::is_allowed_constant(&less));
-        assert!(Instruction::is_allowed_constant(&max));
-        assert!(!Instruction::is_allowed_constant(&more));
+        if let (Ok(little), Ok(maxed), Ok(over)) =
+            (less.parse(), max.parse(), more.parse())
+        {
+            assert!(Instruction::is_allowed_constant(&less, little));
+            assert!(Instruction::is_allowed_constant(&max, maxed));
+            assert!(!Instruction::is_allowed_constant(&more, over));
+        }
     }
 
     #[test]
     fn read_address() {
         let instructions: [&str; 4] = ["@200", "@variable", "@LOOP", "@R16"];
         for instruction in instructions {
-            assert!(matches!(
-                Instruction::from_str(instruction),
-                Ok(Instruction::Address(_))
-            ));
+            match Instruction::from_str(instruction) {
+                Ok(
+                    Instruction::AddressSymbolic(_)
+                    | Instruction::AddressLiteral(_),
+                ) => (),
+                _ => panic!("failed to correctly parse a good address"),
+            }
         }
 
         let bad_instructions: [&str; 4] = ["@@200", "@var*iable", "", "(@R16"];

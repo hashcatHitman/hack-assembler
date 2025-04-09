@@ -1,5 +1,30 @@
 //! # Parser Errors
 //!
+//! <details>
+//!     <summary>Licensing Info</summary>
+//!
+//! > hack-assembler - An assembler that translates programs written in the Hack
+//! > assembly language into Hack binary code.
+//! > Copyright (C) 2025  [hashcatHitman] and [jlg-repo]
+//! >
+//! > This program is free software: you can redistribute it and/or modify
+//! > it under the terms of the GNU Affero General Public License as published
+//! > by the Free Software Foundation, either version 3 of the License, or
+//! > (at your option) any later version.
+//! >
+//! > This program is distributed in the hope that it will be useful,
+//! > but WITHOUT ANY WARRANTY; without even the implied warranty of
+//! > MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//! > GNU Affero General Public License for more details.
+//! >
+//! > You should have received a copy of the GNU Affero General Public License
+//! > along with this program.  If not, see <https://www.gnu.org/licenses/>.
+//!
+//! [hashcatHitman]: https://github.com/hashcatHitman
+//! [jlg-repo]: https://github.com/jlg-repo
+//!
+//! </details>
+//!
 //! A submodule containing the various [`ParserError`]s that can occur.
 
 use std::fmt::Display;
@@ -8,7 +33,7 @@ use std::io::Error;
 use super::Instruction;
 
 /// An enum containing all [`ParserError`]s.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ParserError {
     /// A [`ParserError`] returned when failing to read the file provided.
     CannotReadFileFromPath(String),
@@ -56,7 +81,7 @@ impl Display for ParserError {
                     f,
                     "addresses must be valid symbols or non-negative integers \
                     which are less than or equal to {}",
-                    Instruction::MAX_VALID_MEMORY_ADDRESS
+                    Instruction::MAX_VALID_CONSTANT
                 );
             }
         };
