@@ -28,8 +28,9 @@
 //! An assembler that translates programs written in the Hack assembly language
 //! into Hack binary code. Based on the nand2tetris course.
 
-use hack_assembler::parser::{Code, Instruction, ParserError};
 use std::str::FromStr;
+
+use hack_assembler::parser::{Code, Instruction, ParserError};
 
 /// The entrypoint of the assembler executable.
 fn main() {

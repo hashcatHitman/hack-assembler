@@ -30,8 +30,9 @@
 //! opcodes (or parts of opcodes) for the Hack computer - namely,
 //! [`Instruction`] and its components.
 
-use super::{Compute, Destination, Instruction, Jump};
 use strum::EnumProperty;
+
+use super::{Compute, Destination, Instruction, Jump};
 
 /// A trait implemented by any type which can be parsed into opcodes (or parts
 /// of opcodes) for the Hack computer.
@@ -104,8 +105,10 @@ impl Code for Instruction {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+
     use strum::IntoEnumIterator;
+
+    use super::*;
 
     fn codegen_from_arrays(instructions: &[Instruction], codes: &[&str]) {
         for (index, instruction) in instructions.iter().enumerate() {

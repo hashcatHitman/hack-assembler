@@ -78,11 +78,11 @@ use std::fmt::Display;
 use std::fs::read_to_string;
 use std::iter::Iterator;
 use std::str::FromStr;
-use strum::VariantNames;
-use strum_macros::{EnumIter, EnumProperty, EnumString, VariantNames};
 
 pub use codegen::Code;
 pub use error::ParserError;
+use strum::VariantNames;
+use strum_macros::{EnumIter, EnumProperty, EnumString, VariantNames};
 
 /// The [`Destination`] portion of a [`Instruction::Compute`].
 ///
@@ -338,7 +338,10 @@ impl Parser {
     /// Returns an [`Iterator`] over the lines of a the held file contents, as
     /// string slices.
     pub fn lines(&self) -> impl Iterator<Item = &str> {
-        self.file.lines().filter(|line| !line.starts_with("//"))
+        self.file
+            .lines()
+            .map(|line: &str| line.trim())
+            .filter(|line: &&str| !line.starts_with("//"))
     }
 }
 
@@ -530,7 +533,7 @@ impl FromStr for Instruction {
 
     /// Attempts to parse a string into a valid [`Instruction`].
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
+        match s {
             label if label.starts_with('(') || label.ends_with(')') => {
                 Self::try_parse_label(label)
             }
@@ -577,6 +580,31 @@ impl Display for Instruction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skip_comments() {
+        let assembly: &str = "// Foo bar\n\tM=M+1\n\t//@100\n\t@500";
+        let parser: Parser = Parser {
+            file: assembly.into(),
+        };
+        let mut assembly = parser.lines();
+
+        match assembly.next() {
+            Some("M=M+1") => (),
+            Some(other) => panic!("expected M=M+1, found \"{other}\""),
+            None => panic!("expected M=M+1, found None"),
+        }
+
+        match assembly.next() {
+            Some("@500") => (),
+            Some(other) => panic!("expected @500, found \"{other}\""),
+            None => panic!("expected @500, found None"),
+        }
+
+        if let Some(other) = assembly.next() {
+            panic!("expected None, found \"{other}\"")
+        }
+    }
 
     #[test]
     fn allowed_symbols() {
