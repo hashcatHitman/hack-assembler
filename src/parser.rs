@@ -338,7 +338,7 @@ impl Parser {
     /// Returns an [`Iterator`] over the lines of a the held file contents, as
     /// string slices.
     pub fn lines(&self) -> impl Iterator<Item = &str> {
-        self.file.lines()
+        self.file.lines().filter(|line| !line.starts_with("//"))
     }
 }
 

@@ -70,7 +70,7 @@ impl<T: AutoCode> Code for T {
 
         let error: String = format!("{}{}", TEMPLATE, <Self as AutoCode>::SELF);
         self.get_str("code")
-            .map_or_else(|| panic!("{error}"), std::convert::Into::into)
+            .map_or_else(|| panic!("{error}"), Into::into)
     }
 }
 
