@@ -28,4 +28,7 @@
 //! `hack-assembler` is a crate providing an assembler that translates programs
 //! written in the Hack assembly language into Hack binary code. Based on the
 //! nand2tetris course.
+
+#![feature(strict_provenance_lints, unqualified_local_imports)]
+
 pub mod parser;

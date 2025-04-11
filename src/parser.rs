@@ -31,8 +31,9 @@
 //! For example, all of the following will be read correctly except "fail",
 //! which is not a valid Hack assembly instruction:
 //! ```
-//! use hack_assembler::parser::{Code, Instruction, ParserError};
 //! use std::str::FromStr;
+//!
+//! use hack_assembler::parser::{Code, Instruction, ParserError};
 //!
 //! let instructions: [&str; 5] =
 //!     [" (wow)\n", "@var", "@100", "\tADM=M-1;JNE", "fail"];
@@ -73,16 +74,15 @@
 mod codegen;
 mod error;
 
-use std::convert::TryFrom;
 use std::fmt::Display;
 use std::fs::read_to_string;
-use std::iter::Iterator;
 use std::str::FromStr;
 
-pub use codegen::Code;
-pub use error::ParserError;
 use strum::VariantNames;
 use strum_macros::{EnumIter, EnumProperty, EnumString, VariantNames};
+
+pub use self::codegen::Code;
+pub use self::error::ParserError;
 
 /// The [`Destination`] portion of a [`Instruction::Compute`].
 ///
@@ -324,7 +324,7 @@ pub enum Jump {
 ///         parser.lines().for_each(|line: &str| println!("{line}"));
 ///         // Does it again, from the start.
 ///         parser.lines().for_each(|line: &str| println!("{line}"));
-///         }
+///     }
 ///     Err(_) => println!("Failure!"),
 /// }
 /// ```

@@ -13,19 +13,46 @@ categories = ["command-line-utilities", "compilers", "parser-implementations"]
 publish = false
 
 [lints.rust]
-unsafe_code = { level = "forbid", priority = 2 }
-deprecated_safe_2024 = { level = "forbid", priority = 2 }
+unsafe_code = "forbid"
+deprecated_safe_2024 = "forbid"
+missing_unsafe_on_extern = "forbid"
+unsafe_attr_outside_unsafe = "forbid"
+unsafe_op_in_unsafe_fn = "forbid"
+absolute_paths_not_starting_with_crate = "warn"
+ambiguous_negative_literals = "warn"
+closure_returning_async_block = "warn"
+fuzzy_provenance_casts = "warn"
+if_let_rescope = "warn"
+lossy_provenance_casts = "warn"
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+non_ascii_idents = "warn"
+redundant_imports = "warn"
+redundant_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unnameable_types = "warn"
+unqualified_local_imports = "warn"
+unused_crate_dependencies = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+unused_results = "warn"
 
 [lints.clippy]
-correctness = { level = "forbid", priority = 2 }
-suspicious = { level = "warn", priority = 0 }
-complexity = { level = "warn", priority = 0 }
-perf = { level = "warn", priority = 0 }
-style = { level = "warn", priority = 0 }
-pedantic = { level = "warn", priority = 0 }
-cargo = { level = "warn", priority = 0 }
-missing_docs_in_private_items = { level = "warn", priority = 0 }
+correctness = "forbid"
+suspicious = "warn"
+complexity = "warn"
+perf = "warn"
+style = "warn"
+pedantic = "warn"
+cargo = "warn"
+missing_docs_in_private_items = { level = "warn", priority = 1 }
 must_use_candidate = { level = "allow", priority = 1 }
+nursery = "warn"
+unwrap_used = { level = "warn", priority = 1 }
+expect_used = { level = "warn", priority = 1 }
 
 [dependencies]
 strum = "0.27"
@@ -33,5 +60,15 @@ strum_macros = "0.27"
 
 [profile.release]
 codegen-units = 1
-lto = "fat"
 strip = "symbols"
+opt-level = 3
+debug = false
+lto = true
+incremental = false
+
+[profile.release.build-override]
+codegen-units = 1
+strip = "symbols"
+opt-level = 3
+debug = false
+incremental = false
