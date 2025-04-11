@@ -87,11 +87,13 @@ impl AutoCode for Jump {
     const SELF: &str = "Jump";
 }
 
-impl Code for Instruction {
+impl Code for Instruction<'_> {
     fn code(&self) -> String {
         match self {
-            Self::AddressLiteral(address) => format!("0{address:015b}"),
-            Self::AddressSymbolic(_) => "TODO: Needs symbol table.".into(),
+            Self::AddressLiteral(address) => {
+                format!("0{address:015b}")
+            }
+            Self::AddressSymbolic(_) => "TODO: Needs symbol table.".to_owned(),
             Self::Compute(destination, compute, jump) => format!(
                 "111{}{}{}",
                 compute.code(),

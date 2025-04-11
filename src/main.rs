@@ -30,20 +30,20 @@
 
 #![feature(strict_provenance_lints, unqualified_local_imports)]
 
-use std::str::FromStr;
-
-use hack_assembler::parser::{Code, Instruction, ParserError};
+use hack_assembler::parser::{Code, Instruction, Parser, ParserError};
 use {strum as _, strum_macros as _};
 
 /// The entrypoint of the assembler executable.
 fn main() {
     println!("Hack the planet!");
-    let instructions: [&str; 5] =
-        [" (wow)\n", "@var", "@100", "\tADM=M-1;JNE", "fail"];
+    let instructions: &str = " (wow)\n\n@var\n@100\n\tADM=M-1;JNE\nfail\n";
+    let mut parser: Parser = Parser::default();
+    let _ = parser.set_file(instructions);
+    let parser: Parser = parser;
 
-    for instruction in instructions {
+    for instruction in parser.lines() {
         let instruction: Result<Instruction, ParserError> =
-            Instruction::from_str(instruction);
+            Instruction::try_from(instruction);
         match instruction {
             Ok(
                 instruction @ (Instruction::AddressLiteral(_)

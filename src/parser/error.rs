@@ -34,7 +34,7 @@ use super::Instruction;
 
 /// An enum containing all [`ParserError`]s.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum ParserError {
+pub enum ParserError<'a> {
     /// A [`ParserError`] returned when failing to read the file provided.
     CannotReadFileFromPath(String),
     /// A [`ParserError`] returned when an instruction is suspected to be a
@@ -45,13 +45,13 @@ pub enum ParserError {
     SymbolHasForbiddenCharacter,
     /// A [`ParserError`] returned whenever we get an instruction we honestly
     /// aren't sure what to do with.
-    UnrecognizedInstruction,
+    UnrecognizedInstruction(&'a str),
     /// A [`ParserError`] returned when an instruction is suspected to be an
     /// address but does not qualify as a valid address of either form.
     InvalidAddress,
 }
 
-impl From<Error> for ParserError {
+impl From<Error> for ParserError<'_> {
     /// Creates a [`ParserError::CannotReadFileFromPath`] from the [`Error`]
     /// returned by failed file operations.
     fn from(value: Error) -> Self {
@@ -59,7 +59,7 @@ impl From<Error> for ParserError {
     }
 }
 
-impl Display for ParserError {
+impl Display for ParserError<'_> {
     /// Determines the error message for displaying [`ParserError`]s.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message: &str = match self {
@@ -73,8 +73,12 @@ impl Display for ParserError {
                 (0-9), underscores (_), dots (.), dollar signs ($), and/or \
                 colons (:) that does not begin with a digit"
             }
-            Self::UnrecognizedInstruction => {
-                "could not determine instruction type"
+            Self::UnrecognizedInstruction(bad_instruction) => {
+                return write!(
+                    f,
+                    "could not determine instruction type for \
+                    \"{bad_instruction}\""
+                );
             }
             Self::InvalidAddress => {
                 return write!(
