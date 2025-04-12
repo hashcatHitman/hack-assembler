@@ -46,6 +46,7 @@ pub trait Code {
 /// which implements it.
 ///
 /// # Panics
+///
 /// It is assumed that implementors of this trait will be enums which implement
 /// [`EnumProperty`] and have a property called "code" on each variant
 /// containing the appropriate opcode String for that variant. If any variants
@@ -61,6 +62,7 @@ impl<T: AutoCode> Code for T {
     /// binary String.
     ///
     /// # Panics
+    ///
     /// It is assumed that implementors of this trait will be enums which
     /// implement [`EnumProperty`] and have a property called "code" on each
     /// variant containing the appropriate opcode String for that variant. If
@@ -87,7 +89,7 @@ impl AutoCode for Jump {
     const SELF: &str = "Jump";
 }
 
-impl Code for Instruction<'_> {
+impl Code for Instruction {
     fn code(&self) -> String {
         match self {
             Self::AddressLiteral(address) => {

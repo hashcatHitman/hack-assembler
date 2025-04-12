@@ -31,7 +31,7 @@
 //! For example, all of the following will be read correctly except "fail",
 //! which is not a valid Hack assembly instruction:
 //! ```
-//! use hack_assembler::parser::{Code, Instruction, Parser, ParserError};
+//! use hack_assembler::parser::{Code, HackError, Instruction, Parser};
 //!
 //! let instructions: &str = " (wow)\n\n@var\n@100\n\tADM=M-1;JNE\nfail\n";
 //! let mut parser: Parser = Parser::default();
@@ -39,7 +39,7 @@
 //! let parser: Parser = parser;
 //!
 //! for instruction in parser.lines() {
-//!     let instruction: Result<Instruction, ParserError> =
+//!     let instruction: Result<Instruction, HackError> =
 //!         Instruction::try_from(instruction);
 //!     match instruction {
 //!         Ok(
@@ -70,9 +70,11 @@
 //!     }
 //! }
 //! ```
+//!
+//! Note that you cannot typically set the file contents of a [`Parser`]
+//! directly - it is done here only for demonstration purposes.
 
 mod codegen;
-mod error;
 
 use std::fmt::Display;
 use std::fs::read_to_string;
@@ -82,7 +84,7 @@ use strum::VariantNames;
 use strum_macros::{EnumIter, EnumProperty, EnumString, VariantNames};
 
 pub use self::codegen::Code;
-pub use self::error::ParserError;
+pub use crate::error::HackError;
 
 /// The [`Destination`] portion of a [`Instruction::Compute`].
 ///
@@ -314,10 +316,10 @@ pub enum Jump {
 ///
 /// To create and use a new parser:
 /// ```
-/// use hack_assembler::parser::{Parser, ParserError};
+/// use hack_assembler::parser::{HackError, Parser};
 ///
 /// // Tries to read the contents of `foo.asm`.
-/// let parser: Result<Parser, ParserError> = Parser::try_from("foo.asm");
+/// let parser: Result<Parser, HackError> = Parser::try_from("foo.asm");
 /// match parser {
 ///     Ok(parser) => {
 ///         // Prints every line of `foo.asm`
@@ -328,6 +330,10 @@ pub enum Jump {
 ///     Err(_) => println!("Failure!"),
 /// }
 /// ```
+///
+/// You can use [`std::iter::Iterator::map`] alongside
+/// [`self::Instruction::try_from`] to actually do the trnaslation from
+/// [`String`] to [`Instruction`].
 #[derive(Debug, Clone, Hash, Default)]
 pub struct Parser {
     /// The contents of the file as a String.
@@ -341,19 +347,20 @@ impl Parser {
         self.file
             .lines()
             .map(|line: &str| line.trim())
-            .filter(|line: &&str| !line.starts_with("//"))
+            .filter(|line: &&str| !line.starts_with("//") && !line.is_empty())
     }
 
     /// Manually sets the file contents held by this [`Parser`], meant for
     /// testing purposes.
-    pub fn set_file<'a>(&'a mut self, file_contents: &str) -> &'a mut Self {
+    #[allow(dead_code, reason = "Internally used for documentation.")]
+    pub fn set_file(&mut self, file_contents: &str) -> &mut Self {
         file_contents.clone_into(&mut self.file);
         self
     }
 }
 
-impl<'a> TryFrom<&'a str> for Parser {
-    type Error = ParserError<'a>;
+impl TryFrom<&str> for Parser {
+    type Error = HackError;
 
     /// Tries to read the contents of a file located at the path indicated by
     /// `value`.
@@ -366,25 +373,24 @@ impl<'a> TryFrom<&'a str> for Parser {
 /// The two types of [`Instruction`] (and the one pseudo-instruction) supported
 /// by the Hack CPU.
 #[derive(Debug, Clone, Hash)]
-pub enum Instruction<'a> {
+pub enum Instruction {
     /// [`Instruction::AddressSymbolic`] represents an A-instruction. The
-    /// [`str`] referenced inside should be the symbol that would come after the
-    /// `@`.
+    /// [`String`] inside should be the symbol that would come after the `@`.
     ///
     /// Example:
     /// ```
     /// use hack_assembler::parser::Instruction;
     ///
     /// // @my_var
-    /// Instruction::AddressSymbolic("my_var");
+    /// Instruction::AddressSymbolic("my_var".to_owned());
     /// ```
-    AddressSymbolic(&'a str),
+    AddressSymbolic(String),
     /// [`Instruction::AddressLiteral`] represents an A-instruction. The
     /// [`u16`] inside should be the numerical constant that would come after
     /// the `@`. It must be less than or equal to
     /// [`Instruction::MAX_VALID_CONSTANT`].
     ///
-    /// Examples:
+    /// Example:
     /// ```
     /// use hack_assembler::parser::Instruction;
     ///
@@ -398,7 +404,7 @@ pub enum Instruction<'a> {
     /// See [`Destination`], [`Compute`], and [`Jump`] for detailed information.
     Compute(Destination, Compute, Jump),
     /// [`Instruction::Label`] represents the label pseudo-instruction. The
-    /// [`str`] referenced inside should be the symbol that would go inside the
+    /// [`String`] inside should be the symbol that would go inside the
     /// parentheses.
     ///
     /// Example:
@@ -406,35 +412,53 @@ pub enum Instruction<'a> {
     /// use hack_assembler::parser::Instruction;
     ///
     /// // (LOOP)
-    /// Instruction::Label("LOOP");
+    /// Instruction::Label("LOOP".to_owned());
     /// ```
-    Label(&'a str),
+    Label(String),
 }
 
-impl<'a> Instruction<'a> {
+impl Instruction {
     /// The highest valid constant in the Hack computer.
     pub const MAX_VALID_CONSTANT: u16 = 0x7FFF;
 
     /// Attempts to parse a [`Instruction::Label`] from a string.
-    fn try_parse_label(label: &'a str) -> Result<Self, ParserError<'a>> {
+    ///
+    /// # Errors
+    ///
+    /// If the borrowed [str] slice is not between exactly one set of
+    /// parentheses (like this text), [`HackError::LabelHasBadParentheses`] will
+    /// be returned.
+    ///
+    /// Otherwise, [`HackError::SymbolHasForbiddenCharacter`] may be returned if
+    /// the text content contains characters not allowed in symbols.
+    fn try_parse_label(label: &str) -> Result<Self, HackError> {
         if !(label.starts_with('(') && label.ends_with(')')) {
-            return Err(ParserError::LabelHasBadParentheses);
+            return Err(HackError::LabelHasBadParentheses);
         }
         let symbol: &str = &label[1..label.len() - 1];
         match symbol {
             symbol if symbol.contains(['(', ')']) => {
-                Err(ParserError::LabelHasBadParentheses)
+                Err(HackError::LabelHasBadParentheses)
             }
             symbol if !Self::is_allowed_symbol(symbol) => {
-                Err(ParserError::SymbolHasForbiddenCharacter)
+                Err(HackError::SymbolHasForbiddenCharacter)
             }
-            _ => Ok(Self::Label(&label[1..label.len() - 1])),
+            _ => Ok(Self::Label(label[1..label.len() - 1].to_owned())),
         }
     }
 
     /// Attempts to parse an [`Instruction::AddressLiteral`] or an
     /// [`Instruction::AddressSymbolic`] from a string.
-    fn try_parse_address(address: &'a str) -> Result<Self, ParserError<'a>> {
+    ///
+    /// # Errors
+    ///
+    /// Any failures will return a [`HackError::InvalidAddress`].
+    ///
+    /// This can include exceeding [`Instruction::MAX_VALID_CONSTANT`] or
+    /// containing characters not permitted in symbols. See
+    /// [`HackError::SymbolHasForbiddenCharacter`] for the definition of a valid
+    /// symbol.
+    fn try_parse_address(address: &str) -> Result<Self, HackError> {
         let address: &str = &address[1..];
         let parsed: Result<u16, _> = address.parse();
         match (address, parsed) {
@@ -444,44 +468,59 @@ impl<'a> Instruction<'a> {
                 Ok(Self::AddressLiteral(parsed))
             }
             (symbol, _) if Self::is_allowed_symbol(symbol) => {
-                Ok(Self::AddressSymbolic(symbol))
+                Ok(Self::AddressSymbolic(symbol.to_owned()))
             }
-            _ => Err(ParserError::InvalidAddress),
+            _ => Err(HackError::InvalidAddress),
         }
     }
 
     /// Attempts to parse a [`Instruction::Compute`] from a string.
-    fn try_parse_compute(compute: &str) -> Result<Self, ParserError> {
-        let split: [&str; 3] = Self::decompose_compute_instruction(compute);
+    ///
+    /// # Errors
+    ///
+    /// As the more complex instruction, these simply return
+    /// [`HackError::UnrecognizedInstruction`] on any failure.
+    fn try_parse_compute(compute: &str) -> Result<Self, HackError> {
+        let split: [Option<&str>; 3] =
+            Self::decompose_compute_instruction(compute);
         let mut compare: String = String::with_capacity(11);
-        if !split[0].is_empty() {
-            compare.push_str(split[0]);
+
+        let d: &str = split[0].map_or("", |d| {
+            compare.push_str(d);
             compare.push('=');
-        }
-        compare.push_str(split[1]);
-        if !split[2].is_empty() {
+            d
+        });
+
+        let c: &str = split[1].map_or("", |c| {
+            compare.push_str(c);
+            c
+        });
+
+        let j: &str = split[2].map_or("", |j| {
             compare.push(';');
-            compare.push_str(split[2]);
-        }
-        if Compute::VARIANTS.contains(&split[1]) && compare == compute {
+            compare.push_str(j);
+            j
+        });
+
+        if Compute::VARIANTS.contains(&c) && compare == compute {
             return Ok(Self::Compute(
-                Destination::from_str(split[0]).map_err(|_| {
-                    ParserError::UnrecognizedInstruction(split[0])
+                Destination::from_str(d).map_err(|_| {
+                    HackError::UnrecognizedInstruction(d.to_owned())
                 })?,
-                Compute::from_str(split[1]).map_err(|_| {
-                    ParserError::UnrecognizedInstruction(split[1])
+                Compute::from_str(c).map_err(|_| {
+                    HackError::UnrecognizedInstruction(c.to_owned())
                 })?,
-                Jump::from_str(split[2]).map_err(|_| {
-                    ParserError::UnrecognizedInstruction(split[2])
+                Jump::from_str(j).map_err(|_| {
+                    HackError::UnrecognizedInstruction(j.to_owned())
                 })?,
             ));
         }
-        Err(ParserError::UnrecognizedInstruction(compute))
+        Err(HackError::UnrecognizedInstruction(compute.to_owned()))
     }
 
     /// Takes a reference to a string and attempts to split it into the parts
     /// of a [`Instruction::Compute`].
-    fn decompose_compute_instruction(string: &str) -> [&str; 3] {
+    fn decompose_compute_instruction(string: &str) -> [Option<&str>; 3] {
         let separators: [char; 2] = ['=', ';'];
         let mut parts: Vec<&str> = string.split(separators).collect();
         let mut dest: &str = "";
@@ -507,7 +546,20 @@ impl<'a> Instruction<'a> {
             }
             string => comp = string,
         }
-        [dest, comp, jump]
+        let final_result;
+        let mut running = [Some(dest), Some(comp), Some(jump)];
+        'matchloop: loop {
+            match running {
+                [Some(""), c, j] => running = [None, c, j],
+                [d, Some(""), j] => running = [d, None, j],
+                [d, c, Some("")] => running = [d, c, None],
+                result => {
+                    final_result = result;
+                    break 'matchloop;
+                }
+            }
+        }
+        final_result
     }
 
     /// Determine if a given string is a valid symbol.
@@ -539,11 +591,17 @@ impl<'a> Instruction<'a> {
     }
 }
 
-impl<'a> TryFrom<&'a str> for Instruction<'a> {
-    type Error = ParserError<'a>;
+impl TryFrom<&str> for Instruction {
+    type Error = HackError;
 
     /// Attempts to parse a string into a valid [`Instruction`].
-    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
+    ///
+    /// # Errors
+    ///
+    /// Any errors returned by [`Instruction::try_parse_label`],
+    /// [`Instruction::try_parse_address`], or
+    /// [`Instruction::try_parse_compute`] will be returned by this method.
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
         match s {
             label if label.starts_with('(') || label.ends_with(')') => {
                 Self::try_parse_label(label)
@@ -556,9 +614,9 @@ impl<'a> TryFrom<&'a str> for Instruction<'a> {
     }
 }
 
-impl Display for Instruction<'_> {
+impl Display for Instruction {
     /// Attempts to create a string representation of this [`Instruction`].
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::AddressLiteral(address) => {
                 write!(f, "{address}")

@@ -30,46 +30,22 @@
 
 #![feature(strict_provenance_lints, unqualified_local_imports)]
 
-use hack_assembler::parser::{Code, Instruction, Parser, ParserError};
+use std::{env, process};
+
+use hack_assembler::{Config, run};
 use {strum as _, strum_macros as _};
 
 /// The entrypoint of the assembler executable.
 fn main() {
-    println!("Hack the planet!");
-    let instructions: &str = " (wow)\n\n@var\n@100\n\tADM=M-1;JNE\nfail\n";
-    let mut parser: Parser = Parser::default();
-    let _ = parser.set_file(instructions);
-    let parser: Parser = parser;
+    let args: env::Args = env::args();
 
-    for instruction in parser.lines() {
-        let instruction: Result<Instruction, ParserError> =
-            Instruction::try_from(instruction);
-        match instruction {
-            Ok(
-                instruction @ (Instruction::AddressLiteral(_)
-                | Instruction::AddressSymbolic(_)),
-            ) => {
-                println!(
-                    "Found address: {} with code {}",
-                    instruction,
-                    instruction.code()
-                );
-            }
-            Ok(instruction @ Instruction::Label(_)) => {
-                println!(
-                    "Found label: {} with code {}",
-                    instruction,
-                    instruction.code()
-                );
-            }
-            Ok(instruction @ Instruction::Compute(..)) => {
-                println!(
-                    "Found compute: {} with code {}",
-                    instruction,
-                    instruction.code()
-                );
-            }
-            Err(error) => eprintln!("{error}"),
-        }
+    let config: Config = Config::build(args).unwrap_or_else(|error| {
+        eprintln!("Problem parsing arguments: {error}");
+        process::exit(1);
+    });
+
+    if let Err(error) = run(&config) {
+        eprintln!("Problem running: {error}");
+        process::exit(1);
     }
 }
