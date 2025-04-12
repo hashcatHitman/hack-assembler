@@ -1,0 +1,27 @@
+
+# cargo-vet audits file
+
+[[audits.strum]]
+who = "hashcatHitman <155700084+hashcatHitman@users.noreply.github.com>"
+criteria = "safe-to-deploy"
+delta = "0.26.3 -> 0.27.1"
+notes = """
+Not many changes were made. Largely configuration and comments. Bumped
+dependencies and MSRV. Some small code changes, but no unsafe and nothing
+particularly complex.
+"""
+
+[[audits.strum_macros]]
+who = "hashcatHitman <155700084+hashcatHitman@users.noreply.github.com>"
+criteria = "safe-to-deploy"
+delta = "0.26.4 -> 0.27.1"
+notes = """
+Mostly housekeeping and inlining. No new unsafe. Better error handling. Looks
+good to me.
+"""
+
+[[trusted.syn]]
+criteria = "safe-to-deploy"
+user-id = 3618 # David Tolnay (dtolnay)
+start = "2019-03-01"
+end = "2026-04-11"
