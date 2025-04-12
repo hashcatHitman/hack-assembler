@@ -10,7 +10,7 @@ Hack binary code. Based on the nand2tetris course, and written in Rust.
 ## Getting Started
 
 You'll need to install Rust and its package manager, Cargo, on your system.
-Please refer to the official [reccommended Rust installation method] for your
+Please refer to the official [recommended Rust installation method] for your
 system.
 
 Note that you may need to use the nightly version of Rust. If you're using,
@@ -68,6 +68,6 @@ already present. You must delete or relocate existing files to recompile them.
 [dependency badge]: https://deps.rs/repo/github/hashcatHitman/hack-assembler/status.svg
 [deps.rs]: https://deps.rs/repo/github/hashcatHitman/hack-assembler
 
-[reccommended Rust installation method]: https://www.rust-lang.org/tools/install
+[recommended Rust installation method]: https://www.rust-lang.org/tools/install
 
 [Git documentation]: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
