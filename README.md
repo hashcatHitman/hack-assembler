@@ -13,11 +13,12 @@ You'll need to install Rust and its package manager, Cargo, on your system.
 Please refer to the official [recommended Rust installation method] for your
 system.
 
-Note that you may need to use the nightly version of Rust. If you're using,
+Note that you may need to use the nightly version of Rust. If you're using
 Rustup you can accomplish this like so:
 
 ```bash
 rustup toolchain install nightly
+rustup default nightly
 ```
 
 You should also have some version of git installed. You can refer to the
@@ -30,7 +31,7 @@ git clone https://github.com/hashcatHitman/hack-assembler.git
 cd hack-assembler
 ```
 
-If you'd like to read the documentation, the reccommended way to do so is with:
+If you'd like to read the documentation, the recommended way to do so is with:
 
 ```bash
 cargo doc --document-private-items --open
