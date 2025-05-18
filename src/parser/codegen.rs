@@ -11,14 +11,18 @@
 
 use strum::EnumProperty;
 
-use super::{Compute, Destination, Instruction, Jump};
+use super::{Compute, Destination, HackError, Instruction, Jump};
 
 /// A trait implemented by any type which can be parsed into opcodes (or parts
 /// of opcodes) for the Hack computer.
 pub trait Code {
     /// Returns the opcode representative of this implementor of [`Code`], as a
     /// binary String.
-    fn code(&self) -> String;
+    #[expect(
+        clippy::missing_errors_doc,
+        reason = "I'll finish the docs later."
+    )]
+    fn code(&self) -> Result<String, HackError>;
 }
 
 /// A trait which provides a blanket implementation of [`Code`] for any type
@@ -46,13 +50,16 @@ impl<T: AutoCode> Code for T {
     /// implement [`EnumProperty`] and have a property called "code" on each
     /// variant containing the appropriate opcode String for that variant. If
     /// any variants are missing this property, this method will panic!
-    fn code(&self) -> String {
+    fn code(&self) -> Result<String, HackError> {
         const TEMPLATE: &str =
             "missing a codegen property for one or more of the variants of ";
 
         let error: String = format!("{}{}", TEMPLATE, <Self as AutoCode>::SELF);
+
         self.get_str("code")
-            .map_or_else(|| panic!("{error}"), Into::into)
+            .map_or(Err(HackError::WriteError(error)), |code| {
+                Ok(code.to_owned())
+            })
     }
 }
 
@@ -69,24 +76,25 @@ impl AutoCode for Jump {
 }
 
 impl Code for Instruction {
-    fn code(&self) -> String {
-        match self {
-            Self::AddressLiteral(address) => {
-                format!("0{address:015b}")
+    fn code(&self) -> Result<String, HackError> {
+        match *self {
+            Self::AddressLiteral(address) => Ok(format!("0{address:015b}")),
+            Self::AddressSymbolic(_) => {
+                todo!("TODO: Needs symbol table.")
             }
-            Self::AddressSymbolic(_) => "TODO: Needs symbol table.".to_owned(),
-            Self::Compute(destination, compute, jump) => format!(
+            Self::Compute(destination, compute, jump) => Ok(format!(
                 "111{}{}{}",
-                compute.code(),
-                destination.code(),
-                jump.code()
-            ),
-            Self::Label(_) => format!("0{}", "TODO: Needs symbol table."),
+                compute.code()?,
+                destination.code()?,
+                jump.code()?
+            )),
+            Self::Label(_) => todo!("TODO: Needs symbol table."),
         }
     }
 }
 
 #[cfg(test)]
+#[expect(clippy::missing_panics_doc, reason = "tests")]
 mod tests {
 
     use strum::IntoEnumIterator;
@@ -95,7 +103,7 @@ mod tests {
 
     fn codegen_from_arrays(instructions: &[Instruction], codes: &[&str]) {
         for (index, instruction) in instructions.iter().enumerate() {
-            assert!(instruction.code() == codes[index]);
+            assert!(instruction.code().unwrap() == codes[index]);
         }
     }
 
@@ -104,7 +112,7 @@ mod tests {
         Enum: IntoEnumIterator + Code,
     {
         for (index, variant) in Enum::iter().enumerate() {
-            assert!(variant.code() == codes[index]);
+            assert!(variant.code().unwrap() == codes[index]);
         }
     }
 
@@ -183,37 +191,35 @@ mod tests {
         ];
 
         const INSTRUCTIONS: [Instruction; 17] = [
-            Instruction::AddressLiteral(0), // Minimum valid
-            Instruction::AddressLiteral(1),
-            Instruction::AddressLiteral(2),
-            Instruction::AddressLiteral(4),
-            Instruction::AddressLiteral(8),
-            Instruction::AddressLiteral(16),
-            Instruction::AddressLiteral(32),
-            Instruction::AddressLiteral(64),
-            Instruction::AddressLiteral(128),
-            Instruction::AddressLiteral(256),
-            Instruction::AddressLiteral(512),
-            Instruction::AddressLiteral(1024),
-            Instruction::AddressLiteral(2048),
-            Instruction::AddressLiteral(4096),
-            Instruction::AddressLiteral(8192),
-            Instruction::AddressLiteral(16384),
-            Instruction::AddressLiteral(32767), // Maximum valid
+            Instruction::AddressLiteral(0x0000), // Minimum valid
+            Instruction::AddressLiteral(0x0001),
+            Instruction::AddressLiteral(0x0002),
+            Instruction::AddressLiteral(0x0004),
+            Instruction::AddressLiteral(0x0008),
+            Instruction::AddressLiteral(0x0010),
+            Instruction::AddressLiteral(0x0020),
+            Instruction::AddressLiteral(0x0040),
+            Instruction::AddressLiteral(0x0080),
+            Instruction::AddressLiteral(0x0100),
+            Instruction::AddressLiteral(0x0200),
+            Instruction::AddressLiteral(0x0400),
+            Instruction::AddressLiteral(0x0800),
+            Instruction::AddressLiteral(0x1000),
+            Instruction::AddressLiteral(0x2000),
+            Instruction::AddressLiteral(0x4000),
+            Instruction::AddressLiteral(0x7FFF), // Maximum valid
         ];
 
         codegen_from_arrays(&INSTRUCTIONS, &CODES);
     }
 
-    // TODO: Needs symbol table.
     #[test]
     fn codegen_address_symbolic() {
-        assert!("TODO".parse::<u8>().is_err());
+        todo!("TODO: Needs symbol table.");
     }
 
-    // TODO: Needs symbol table.
     #[test]
     fn codegen_label() {
-        assert!("TODO".parse::<i8>().is_err());
+        todo!("TODO: Needs symbol table.");
     }
 }

@@ -8,12 +8,19 @@
 //! written in the Hack assembly language into Hack binary code. Based on the
 //! nand2tetris course.
 
-#![feature(strict_provenance_lints, unqualified_local_imports)]
+#![feature(
+    strict_provenance_lints,
+    unqualified_local_imports,
+    must_not_suspend,
+    iterator_try_collect
+)]
 
-use std::io::Write;
+use std::io::Write as _;
+use std::time::SystemTime;
+use std::{fs, io};
 
 use self::error::HackError;
-use self::parser::{Code, Instruction, Parser};
+use self::parser::{Code as _, Instruction, Parser};
 
 pub mod error;
 pub mod parser;
@@ -48,10 +55,10 @@ impl Config {
     /// In either scenario, the error received will be a
     /// [`HackError::Misconfiguration`] holding the number of arguments that
     /// were passed, up to a limit of [`usize::MAX`].
-    pub fn build(
-        mut args: impl Iterator<Item = String>,
+    pub fn build<I: Iterator<Item = String>>(
+        mut args: I,
     ) -> Result<Self, HackError> {
-        let _ = args.next();
+        let _skip_first = args.next();
 
         let file_path: String = match args.next() {
             Some(file_path) => file_path,
@@ -108,9 +115,7 @@ pub fn run(config: &Config) -> Result<(), HackError> {
                     instruction @ (Instruction::Compute(..)
                     | Instruction::AddressLiteral(..)),
                 ) => instruction,
-                // TODO: this is the first pass, the part where you put them
-                // into the symbol table.
-                Ok(_instruction) => todo!(),
+                Ok(_instruction) => todo!("TODO: Needs symbol table."),
                 Err(error) => return Err(error),
             })
         })
@@ -119,9 +124,9 @@ pub fn run(config: &Config) -> Result<(), HackError> {
                 Ok(instruction) => {
                     println!(
                         "{instruction} which formats to {}",
-                        instruction.code()
+                        instruction.code()?
                     );
-                    instruction.code()
+                    instruction.code()?
                 }
                 Err(error) => return Err(error),
             })
@@ -131,9 +136,9 @@ pub fn run(config: &Config) -> Result<(), HackError> {
         None => return Err(HackError::BadFileTypeError),
     };
 
-    let file: std::fs::File = match std::fs::exists(&new_file) {
+    let file: fs::File = match fs::exists(&new_file) {
         Ok(true) => return Err(HackError::FileExistsError { certain: true }),
-        Ok(false) => std::fs::File::create(new_file)?,
+        Ok(false) => fs::File::create(new_file)?,
         Err(_) => return Err(HackError::FileExistsError { certain: false }),
     };
 
@@ -152,13 +157,11 @@ pub fn run(config: &Config) -> Result<(), HackError> {
         Err(error) => return Err(error),
     };
 
-    let mut file: std::fs::File = file;
+    let mut file: fs::File = file;
     println!("{codes}");
-    let result: Result<(), std::io::Error> = file.write_all(codes.as_bytes());
-    let file: std::fs::File = file;
-    file.set_modified(std::time::SystemTime::now())?;
+    let result: Result<(), io::Error> = file.write_all(codes.as_bytes());
+    let file: fs::File = file;
+    file.set_modified(SystemTime::now())?;
 
-    result.map_err(|error: std::io::Error| {
-        HackError::WriteError(error.to_string())
-    })
+    result.map_err(|error: io::Error| HackError::WriteError(error.to_string()))
 }

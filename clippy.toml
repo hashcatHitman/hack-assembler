@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: Copyright © 2025 hashcatHitman
+#
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+allow-dbg-in-tests = true
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true
+allow-print-in-tests = true
+allow-renamed-params-for = []
+allow-unwrap-in-tests = true
+avoid-breaking-exported-api = false
+check-private-items = true
+upper-case-acronyms-aggressive = true
+warn-unsafe-macro-metavars-in-private-macros = true

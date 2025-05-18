@@ -7,24 +7,38 @@
 //! An assembler that translates programs written in the Hack assembly language
 //! into Hack binary code. Based on the nand2tetris course.
 
-#![feature(strict_provenance_lints, unqualified_local_imports)]
+#![feature(
+    strict_provenance_lints,
+    unqualified_local_imports,
+    must_not_suspend,
+    iterator_try_collect
+)]
 
-use std::{env, process};
+use std::env;
 
 use hack_assembler::{Config, run};
 use {strum as _, strum_macros as _};
 
 /// The entrypoint of the assembler executable.
-fn main() {
+// allow instead of expect due to:
+// https://github.com/rust-lang/rust-clippy/issues/14491
+#[allow(clippy::missing_errors_doc, reason = "I'll finish the docs later.")]
+fn main() -> Result<(), u8> {
     let args: env::Args = env::args();
 
-    let config: Config = Config::build(args).unwrap_or_else(|error| {
-        eprintln!("Problem parsing arguments: {error}");
-        process::exit(1);
-    });
+    let config: Config = match Config::build(args) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("Problem parsing arguments: {error}");
+            return Err(1);
+        }
+    };
 
-    if let Err(error) = run(&config) {
-        eprintln!("Problem running: {error}");
-        process::exit(1);
+    match run(&config) {
+        Ok(ok) => Ok(ok),
+        Err(error) => {
+            eprintln!("Problem running: {error}");
+            Err(1)
+        }
     }
 }

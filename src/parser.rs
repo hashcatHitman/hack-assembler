@@ -55,11 +55,11 @@
 
 mod codegen;
 
-use std::fmt::Display;
+use core::fmt::{self, Display};
+use core::str::FromStr as _;
 use std::fs::read_to_string;
-use std::str::FromStr;
 
-use strum::VariantNames;
+use strum::VariantNames as _;
 use strum_macros::{EnumIter, EnumProperty, EnumString, VariantNames};
 
 pub use self::codegen::Code;
@@ -72,6 +72,11 @@ pub use crate::error::HackError;
 /// representation, the first bit is whether or not to store in the `A`
 /// register, the second bit is whether or not to store in the `D` register,
 /// the third bit is whether or not to store in `RAM[A]`.
+#[expect(
+    clippy::min_ident_chars,
+    clippy::upper_case_acronyms,
+    reason = "Not worth renaming these right now. They'll likely be refactored."
+)]
 #[derive(
     Debug,
     Clone,
@@ -137,6 +142,10 @@ pub enum Destination {
 /// - `c4` = `ny` = logical negation of `y`
 /// - `c5` = `f` = if `1`, do `x + y`, else do `x & y`
 /// - `c6` = `no` = if `1`, logical negation of result from `c5`/`f`
+#[expect(
+    clippy::min_ident_chars,
+    reason = "Not worth renaming these right now. They'll likely be refactored."
+)]
 #[derive(
     Debug,
     Clone,
@@ -251,6 +260,10 @@ pub enum Compute {
 /// less than `0`, the second bit is whether or not to jump if [`Compute`] is
 /// equal to `0`, and the third bit is whether or not to jump if [`Compute`] is
 /// greater than `0`.
+#[expect(
+    clippy::upper_case_acronyms,
+    reason = "Not worth renaming these right now. They'll likely be refactored."
+)]
 #[derive(
     Debug,
     Clone,
@@ -331,7 +344,6 @@ impl Parser {
 
     /// Manually sets the file contents held by this [`Parser`], meant for
     /// testing purposes.
-    #[allow(dead_code, reason = "Internally used for documentation.")]
     pub fn set_file(&mut self, file_contents: &str) -> &mut Self {
         file_contents.clone_into(&mut self.file);
         self
@@ -414,7 +426,11 @@ impl Instruction {
         if !(label.starts_with('(') && label.ends_with(')')) {
             return Err(HackError::LabelHasBadParentheses);
         }
-        let symbol: &str = &label[1..label.len() - 1];
+        let symbol: &str = match label.get(1..label.len().saturating_sub(1)) {
+            Some(middle) => middle,
+            None => return Err(HackError::LabelHasBadParentheses),
+        };
+
         match symbol {
             symbol if symbol.contains(['(', ')']) => {
                 Err(HackError::LabelHasBadParentheses)
@@ -422,7 +438,7 @@ impl Instruction {
             symbol if !Self::is_allowed_symbol(symbol) => {
                 Err(HackError::SymbolHasForbiddenCharacter)
             }
-            _ => Ok(Self::Label(label[1..label.len() - 1].to_owned())),
+            _ => Ok(Self::Label(symbol.to_owned())),
         }
     }
 
@@ -438,7 +454,11 @@ impl Instruction {
     /// [`HackError::SymbolHasForbiddenCharacter`] for the definition of a valid
     /// symbol.
     fn try_parse_address(address: &str) -> Result<Self, HackError> {
-        let address: &str = &address[1..];
+        let address: &str = match address.get(1..) {
+            Some(address) => address,
+            None => return Err(HackError::InvalidAddress),
+        };
+
         let parsed: Result<u16, _> = address.parse();
         match (address, parsed) {
             (address, Ok(parsed))
@@ -464,37 +484,46 @@ impl Instruction {
             Self::decompose_compute_instruction(compute);
         let mut compare: String = String::with_capacity(11);
 
-        let d: &str = split[0].map_or("", |d| {
-            compare.push_str(d);
+        let destination: &str = split[0].map_or("", |destination| {
+            compare.push_str(destination);
             compare.push('=');
-            d
+            destination
         });
 
-        let c: &str = split[1].map_or("", |c| {
-            compare.push_str(c);
-            c
+        let computation: &str = split[1].map_or("", |computation| {
+            compare.push_str(computation);
+            computation
         });
 
-        let j: &str = split[2].map_or("", |j| {
+        let jump: &str = split[2].map_or("", |jump| {
             compare.push(';');
-            compare.push_str(j);
-            j
+            compare.push_str(jump);
+            jump
         });
 
-        if Compute::VARIANTS.contains(&c) && compare == compute {
+        if Compute::VARIANTS.contains(&computation) && compare == compute {
             return Ok(Self::Compute(
-                Destination::from_str(d).map_err(|_| {
-                    HackError::UnrecognizedInstruction(d.to_owned())
+                Destination::from_str(destination).map_err(|error| {
+                    HackError::UnrecognizedInstruction(
+                        destination.to_owned(),
+                        Some(error),
+                    )
                 })?,
-                Compute::from_str(c).map_err(|_| {
-                    HackError::UnrecognizedInstruction(c.to_owned())
+                Compute::from_str(computation).map_err(|error| {
+                    HackError::UnrecognizedInstruction(
+                        computation.to_owned(),
+                        Some(error),
+                    )
                 })?,
-                Jump::from_str(j).map_err(|_| {
-                    HackError::UnrecognizedInstruction(j.to_owned())
+                Jump::from_str(jump).map_err(|error| {
+                    HackError::UnrecognizedInstruction(
+                        jump.to_owned(),
+                        Some(error),
+                    )
                 })?,
             ));
         }
-        Err(HackError::UnrecognizedInstruction(compute.to_owned()))
+        Err(HackError::UnrecognizedInstruction(compute.to_owned(), None))
     }
 
     /// Takes a reference to a string and attempts to split it into the parts
@@ -529,9 +558,15 @@ impl Instruction {
         let mut running = [Some(dest), Some(comp), Some(jump)];
         'matchloop: loop {
             match running {
-                [Some(""), c, j] => running = [None, c, j],
-                [d, Some(""), j] => running = [d, None, j],
-                [d, c, Some("")] => running = [d, c, None],
+                [Some(""), computation, jump] => {
+                    running = [None, computation, jump];
+                }
+                [destination, Some(""), jump] => {
+                    running = [destination, None, jump];
+                }
+                [destination, computation, Some("")] => {
+                    running = [destination, computation, None];
+                }
                 result => {
                     final_result = result;
                     break 'matchloop;
@@ -580,8 +615,8 @@ impl TryFrom<&str> for Instruction {
     /// Any errors returned by [`Instruction::try_parse_label`],
     /// [`Instruction::try_parse_address`], or
     /// [`Instruction::try_parse_compute`] will be returned by this method.
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        match s {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
             label if label.starts_with('(') || label.ends_with(')') => {
                 Self::try_parse_label(label)
             }
@@ -594,13 +629,16 @@ impl TryFrom<&str> for Instruction {
 }
 
 impl Display for Instruction {
-    /// Attempts to create a string representation of this [`Instruction`].
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
+    #[expect(
+        clippy::min_ident_chars,
+        reason = "https://github.com/rust-lang/rust-clippy/issues/13396"
+    )]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
             Self::AddressLiteral(address) => {
                 write!(f, "{address}")
             }
-            Self::AddressSymbolic(address) => {
+            Self::AddressSymbolic(ref address) => {
                 write!(f, "{address}")
             }
             Self::Compute(dest, comp, jump) => {
@@ -620,12 +658,13 @@ impl Display for Instruction {
 
                 write!(f, "{compute}")
             }
-            Self::Label(label) => write!(f, "{label}"),
+            Self::Label(ref label) => write!(f, "{label}"),
         }
     }
 }
 
 #[cfg(test)]
+#[expect(clippy::missing_panics_doc, reason = "tests")]
 mod tests {
     use super::*;
 
@@ -706,7 +745,7 @@ mod tests {
 
         let bad_instructions: [&str; 4] = ["@@200", "@var*iable", "", "(@R16"];
         for instruction in bad_instructions {
-            assert!(Instruction::try_from(instruction).is_err());
+            let _error = Instruction::try_from(instruction).unwrap_err();
         }
     }
 
@@ -722,7 +761,7 @@ mod tests {
 
         let bad_instructions: [&str; 4] = ["(START", "()", "", "(16R)"];
         for instruction in bad_instructions {
-            assert!(Instruction::try_from(instruction).is_err());
+            let _error = Instruction::try_from(instruction).unwrap_err();
         }
     }
 
@@ -739,7 +778,7 @@ mod tests {
 
         let bad_instructions: [&str; 4] = ["E=1", "45", "", "=;"];
         for instruction in bad_instructions {
-            assert!(Instruction::try_from(instruction).is_err());
+            let _error = Instruction::try_from(instruction).unwrap_err();
         }
     }
 }

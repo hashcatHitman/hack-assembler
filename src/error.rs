@@ -6,13 +6,19 @@
 //!
 //! A submodule containing the various [`HackError`]s that can occur.
 
-use std::fmt::Display;
+use core::fmt::{self, Display};
 use std::io::Error;
+
+use strum::ParseError;
 
 use crate::parser::Instruction;
 
 /// An enum containing all [`HackError`]s.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[expect(
+    clippy::module_name_repetitions,
+    reason = "Need to restructure for that. Later."
+)]
 pub enum HackError {
     /// A [`HackError`] returned when failing to read the file provided. The
     /// [`String`] within is meant to hold some arbitrary, message: typically,
@@ -29,7 +35,7 @@ pub enum HackError {
     SymbolHasForbiddenCharacter,
     /// A [`HackError`] returned whenever we get an instruction we honestly
     /// aren't sure what to do with, which is contained in its [`String`].
-    UnrecognizedInstruction(String),
+    UnrecognizedInstruction(String, Option<ParseError>),
     /// A [`HackError`] returned when an instruction is suspected to be an
     /// address but does not qualify as a valid address of either form.
     InvalidAddress,
@@ -63,9 +69,12 @@ impl From<Error> for HackError {
 }
 
 impl Display for HackError {
-    /// Determines the error message for displaying [`HackError`]s.
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        let message: &str = match self {
+    #[expect(
+        clippy::min_ident_chars,
+        reason = "https://github.com/rust-lang/rust-clippy/issues/13396"
+    )]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let message: &str = match *self {
             Self::LabelHasBadParentheses => {
                 "label instructions should be surrounded by exactly one pair \
                 of paretheses and contain no others"
@@ -75,7 +84,14 @@ impl Display for HackError {
                 (0-9), underscores (_), dots (.), dollar signs ($), and/or \
                 colons (:) that does not begin with a digit"
             }
-            Self::UnrecognizedInstruction(bad_instruction) => {
+            Self::UnrecognizedInstruction(ref bad_instruction, error) => {
+                if let Some(error) = error {
+                    return write!(
+                        f,
+                        "could not determine instruction type for \
+                        \"{bad_instruction}\" due to: \"{error}\""
+                    );
+                }
                 return write!(
                     f,
                     "could not determine instruction type for \
@@ -97,7 +113,7 @@ impl Display for HackError {
                 );
             }
             Self::FileExistsError { certain } => {
-                if *certain {
+                if certain {
                     "the target output file already exists, and this program \
                     refuses to overwrite it"
                 } else {
@@ -108,8 +124,8 @@ impl Display for HackError {
             Self::BadFileTypeError => {
                 "the target file must have the \".asm\" extension"
             }
-            Self::WriteError(error_message)
-            | Self::CannotReadFileFromPath(error_message) => error_message,
+            Self::WriteError(ref error_message)
+            | Self::CannotReadFileFromPath(ref error_message) => error_message,
         };
 
         write!(f, "{message}")
