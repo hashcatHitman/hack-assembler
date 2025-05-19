@@ -33,7 +33,7 @@ pub trait Code {
 trait AutoCode: EnumProperty {
     /// A constant meant to hold the identifier of the implementing enum, for
     /// use in panics.
-    const SELF: &str;
+    const SELF: &'static str;
 }
 
 impl<T: AutoCode> Code for T {
@@ -57,15 +57,15 @@ impl<T: AutoCode> Code for T {
 }
 
 impl AutoCode for Compute {
-    const SELF: &str = "Compute";
+    const SELF: &'static str = "Compute";
 }
 
 impl AutoCode for Destination {
-    const SELF: &str = "Destination";
+    const SELF: &'static str = "Destination";
 }
 
 impl AutoCode for Jump {
-    const SELF: &str = "Jump";
+    const SELF: &'static str = "Jump";
 }
 
 impl Code for Instruction {

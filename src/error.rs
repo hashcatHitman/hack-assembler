@@ -10,6 +10,7 @@ use std::fmt::Display;
 use std::io::Error;
 
 use crate::parser::Instruction;
+use crate::symbol_table;
 
 /// An enum containing all [`HackError`]s.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -52,6 +53,12 @@ pub enum HackError {
     /// message: typically, this will be the string representation of the
     /// original error, potentially with added context.
     WriteError(String),
+
+    /// A [`HackError`] returned when a label is defined more than once.
+    DuplicateLabel(String),
+
+    /// A [`HackError`] returned when a symbol is not found.
+    SymbolNotFound(String),
 }
 
 impl From<Error> for HackError {
@@ -110,8 +117,27 @@ impl Display for HackError {
             }
             Self::WriteError(error_message)
             | Self::CannotReadFileFromPath(error_message) => error_message,
+            Self::DuplicateLabel(label) => {
+                return write!(f, "label '{label}' is already defined");
+            }
+            Self::SymbolNotFound(symbol) => {
+                return write!(f, "symbol '{symbol}' not found");
+            }
         };
 
         write!(f, "{message}")
     }
 }
+    impl From<symbol_table::SymbolError> for HackError {
+        fn from(err: symbol_table::SymbolError) -> Self {
+            match err {
+                symbol_table::SymbolError::DuplicateLabel(label) => {
+                    HackError::DuplicateLabel(label)
+                },
+                symbol_table::SymbolError::SymbolNotFound(symbol) => {
+                    HackError::SymbolNotFound(symbol)
+                }
+            }
+        }
+    }
+

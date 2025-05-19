@@ -8,15 +8,17 @@
 //! written in the Hack assembly language into Hack binary code. Based on the
 //! nand2tetris course.
 
-#![feature(strict_provenance_lints, unqualified_local_imports)]
-
 use std::io::Write;
+use std::path::Path;
 
 use self::error::HackError;
 use self::parser::{Code, Instruction, Parser};
+use self::symbol_table::{SymbolTable, SymbolError};
 
 pub mod error;
 pub mod parser;
+
+pub mod symbol_table;
 
 /// The basic configuration of the binary, storing the results from a successful
 /// command-line invocation.
@@ -98,54 +100,73 @@ impl Config {
 /// the [`crate::error`] module for more details.
 pub fn run(config: &Config) -> Result<(), HackError> {
     let parser: Parser = Parser::try_from(config.file_path())?;
+    let mut symbol_table = symbol_table::SymbolTable::new();
 
+    // First pass: Build symbol table (labels only)
+    let mut rom_address = 0;
+    for line in parser.lines() {
+        match Instruction::try_from(line) {
+            Ok(Instruction::Label(symbol)) => {
+                symbol_table.add_label(&symbol, rom_address)?;
+
+            }
+            Ok(Instruction::AddressLiteral(_) |
+            Instruction::AddressSymbolic(_) |
+            Instruction::Compute(..)) => {
+                rom_address += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    //Second pass: Generate code
     let codes = parser
         .lines()
         .map(|line: &str| Instruction::try_from(line))
-        .map(|instruction: Result<Instruction, HackError>| {
-            Ok(match instruction {
+        .filter_map(|instruction_result| -> Option<Result<String, HackError>> {
+            match instruction_result {
+                Ok(Instruction::AddressSymbolic(symbol)) => {
+                    let address = symbol_table.get_or_add_variable(&symbol);
+                    let binary = format!("0{:015b}", address);
+                    println!("@{} which formats to {}", symbol, binary);
+                    Some(Ok(binary))
+                }
+                Ok(Instruction::AddressLiteral(address)) => {
+                    let binary = format!("0{:015b}", address);
+                    println!("@{} which formats to {}", address, binary);
+                    Some(Ok(binary))
+                }
                 Ok(
-                    instruction @ (Instruction::Compute(..)
-                    | Instruction::AddressLiteral(..)),
-                ) => instruction,
-                // TODO: this is the first pass, the part where you put them
-                // into the symbol table.
-                Ok(_instruction) => todo!(),
-                Err(error) => return Err(error),
-            })
-        })
-        .map(|instruction: Result<Instruction, HackError>| {
-            Ok(match instruction {
-                Ok(instruction) => {
-                    println!(
+                    instruction @ Instruction::Compute(..)) => {
+                        println!(
                         "{instruction} which formats to {}",
                         instruction.code()
-                    );
-                    instruction.code()
+                        );
+                Some(Ok(instruction.code()))
                 }
-                Err(error) => return Err(error),
-            })
-        });
+                Ok(Instruction::Label(_)) => {
+                    None //labels don't generate code
+                }
+                Err(error) => Some(Err(error)),
+            }
+        })
+                .map(|result| {
+                     result.map(|mut instruction| {
+                                instruction.push('\n');
+                                instruction
+                                })
+                     });
     let new_file: String = match config.file_path().strip_suffix(".asm") {
         Some(filename) => [filename, ".hack"].concat(),
         None => return Err(HackError::BadFileTypeError),
     };
 
-    let file: std::fs::File = match std::fs::exists(&new_file) {
-        Ok(true) => return Err(HackError::FileExistsError { certain: true }),
-        Ok(false) => std::fs::File::create(new_file)?,
-        Err(_) => return Err(HackError::FileExistsError { certain: false }),
+    let file: std::fs::File = match std::path::Path::new(&new_file).exists() {
+        true => return Err(HackError::FileExistsError { certain: true }),
+        false => std::fs::File::create(new_file)?,
+
     };
 
-    let codes: Result<Vec<String>, HackError> = codes
-        .map(|instruction: Result<String, HackError>| match instruction {
-            Ok(mut instruction) => {
-                instruction.push('\n');
-                Ok(instruction)
-            }
-            Err(error) => Err(error),
-        })
-        .collect();
+    let codes: Result<Vec<String>, HackError> = codes.collect();
 
     let codes: String = match codes {
         Ok(codes) => codes.concat(),

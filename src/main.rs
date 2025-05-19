@@ -6,8 +6,19 @@
 //!
 //! An assembler that translates programs written in the Hack assembly language
 //! into Hack binary code. Based on the nand2tetris course.
+//!
+//! //! # Hack Assembler
+// //! ## Usage
+// //!
+// //! ```bash
+// //! ./hack-assembler path/to/yourprogram.asm
+// //! ```
+// //!
+// //! ## Testing
+// //!
+// //! This project includes test programs in the `tests` folder. Verify output using the
+// //! Nand2Tetris Online IDE's CPU Emulator
 
-#![feature(strict_provenance_lints, unqualified_local_imports)]
 
 use std::{env, process};
 
